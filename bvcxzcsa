@@ -1,0 +1,268 @@
+-- Shoot Murderer (100% Accuracy with Red Dot)
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local targetDot = nil
+
+local function findMurderer()
+ for _, i in ipairs(Players:GetPlayers()) do
+  if i.Backpack:FindFirstChild("Knife") then return i end
+ end
+ for _, i in ipairs(Players:GetPlayers()) do
+  if not i.Character then continue end
+  if i.Character:FindFirstChild("Knife") then return i end
+ end
+ return nil
+end
+
+local function findSheriff()
+ for _, i in ipairs(Players:GetPlayers()) do
+  if i.Backpack:FindFirstChild("Gun") then return i end
+ end
+ for _, i in ipairs(Players:GetPlayers()) do
+  if not i.Character then continue end
+  if i.Character:FindFirstChild("Gun") then return i end
+ end
+ return nil
+end
+
+local function findNearestPlayer()
+ local nearestPlayer = nil
+ local shortestDistance = math.huge
+ for _, playerIter in ipairs(Players:GetPlayers()) do
+  if playerIter ~= player and playerIter.Character then
+   local localRootPart = player.Character:FindFirstChild("HumanoidRootPart")
+   local otherRootPart = playerIter.Character:FindFirstChild("HumanoidRootPart")
+   if localRootPart and otherRootPart then
+    local distance = (localRootPart.Position - otherRootPart.Position).Magnitude
+    if distance < shortestDistance then
+     shortestDistance = distance
+     nearestPlayer = playerIter
+    end
+   end
+  end
+ end
+ return nearestPlayer
+end
+
+-- Создание маленькой красной точки на торсе (фиксированный размер 8x8)
+local function createTargetDot()
+ if targetDot then
+  targetDot:Destroy()
+ end
+
+ local billboard = Instance.new("BillboardGui")
+ billboard.Name = "TargetDot"
+ billboard.AlwaysOnTop = true
+ billboard.Size = UDim2.new(0, 8, 0, 8)        -- 8x8 пикселей, всегда
+ billboard.SizeOffset = Vector2.new(0, 0)
+ billboard.StudsOffset = Vector3.new(0, 0, 0)
+ billboard.MaxDistance = math.huge
+ billboard.ClipsDescendants = false
+
+ local dot = Instance.new("Frame")
+ dot.Size = UDim2.new(1, 0, 1, 0)
+ dot.Position = UDim2.new(0, 0, 0, 0)
+ dot.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+ dot.BorderSizePixel = 0
+ dot.Parent = billboard
+
+ local corner = Instance.new("UICorner")
+ corner.CornerRadius = UDim.new(1, 0)
+ corner.Parent = dot
+
+ targetDot = billboard
+ return billboard
+end
+
+-- Обновление позиции точки каждый кадр
+local function updateTargetDot()
+ local murderer = findMurderer()
+ if murderer and murderer.Character then
+  local torso = murderer.Character:FindFirstChild("Torso")
+   or murderer.Character:FindFirstChild("UpperTorso")
+  if torso then
+   if not targetDot or not targetDot.Parent then
+    createTargetDot()
+    targetDot.Parent = torso
+   elseif targetDot.Parent ~= torso then
+    targetDot.Parent = torso
+   end
+  else
+   if targetDot then
+    targetDot:Destroy()
+    targetDot = nil
+   end
+  end
+ else
+  if targetDot then
+   targetDot:Destroy()
+   targetDot = nil
+  end
+ end
+end
+
+RunService.RenderStepped:Connect(updateTargetDot)
+
+-- GUI
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "ShootMurdererGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = playerGui
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 180, 0, 40)
+mainFrame.Position = UDim2.new(0.5, -90, 0.5, -20)
+mainFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Parent = screenGui
+
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 8)
+mainCorner.Parent = mainFrame
+
+local mainStroke = Instance.new("UIStroke")
+mainStroke.Color = Color3.fromRGB(45, 45, 45)
+mainStroke.Thickness = 1
+mainStroke.Parent = mainFrame
+
+local shootButton = Instance.new("TextButton")
+shootButton.Name = "ShootButton"
+shootButton.Size = UDim2.new(1, -8, 1, -8)
+shootButton.Position = UDim2.new(0, 4, 0, 4)
+shootButton.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+shootButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+shootButton.Text = "🎯 SHOOT MURDERER"
+shootButton.Font = Enum.Font.SourceSansBold
+shootButton.TextSize = 14
+shootButton.AutoButtonColor = false
+shootButton.Parent = mainFrame
+
+local shootCorner = Instance.new("UICorner")
+shootCorner.CornerRadius = UDim.new(0, 6)
+shootCorner.Parent = shootButton
+
+-- Drag
+local dragging = false
+local dragStart = nil
+local startPos = nil
+local hasDragged = false
+local dragInputObject = nil
+local DRAG_THRESHOLD = 6
+
+local function startDrag(input)
+ if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+  dragging = true
+  hasDragged = false
+  dragStart = input.Position
+  dragInputObject = input
+  startPos = mainFrame.Position
+
+  local connection
+  connection = input.Changed:Connect(function()
+   if input.UserInputState == Enum.UserInputState.End then
+    dragging = false
+    dragInputObject = nil
+    connection:Disconnect()
+   end
+  end)
+ end
+end
+
+mainFrame.InputBegan:Connect(startDrag)
+shootButton.InputBegan:Connect(startDrag)
+
+UserInputService.InputChanged:Connect(function(input)
+ if not dragging then return end
+ if input ~= dragInputObject then return end
+ if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then return end
+
+ local delta = input.Position - dragStart
+ if not hasDragged and delta.Magnitude >= DRAG_THRESHOLD then
+  hasDragged = true
+ end
+ if hasDragged then
+  mainFrame.Position = UDim2.new(
+   startPos.X.Scale,
+   startPos.X.Offset + delta.X,
+   startPos.Y.Scale,
+   startPos.Y.Offset + delta.Y
+  )
+ end
+end)
+
+-- Стрельба
+shootButton.MouseButton1Click:Connect(function()
+ if hasDragged then return end
+
+ if findSheriff() ~= player then
+  game.StarterGui:SetCore("SendNotification", {
+   Title = "Error",
+   Text = "You're not sheriff/hero.",
+   Duration = 2
+  })
+  return
+ end
+
+ local murderer = findMurderer() or findNearestPlayer()
+ if not murderer then
+  game.StarterGui:SetCore("SendNotification", {
+   Title = "Error",
+   Text = "No murderer (or other player) to shoot.",
+   Duration = 2
+  })
+  return
+ end
+
+ if not player.Character:FindFirstChild("Gun") then
+  local hum = player.Character:FindFirstChild("Humanoid")
+  if player.Backpack:FindFirstChild("Gun") then
+   hum:EquipTool(player.Backpack:FindFirstChild("Gun"))
+  else
+   game.StarterGui:SetCore("SendNotification", {
+    Title = "Error",
+    Text = "You don't have the gun.",
+    Duration = 2
+   })
+   return
+  end
+ end
+
+ local torso = murderer.Character:FindFirstChild("Torso")
+  or murderer.Character:FindFirstChild("UpperTorso")
+ if not torso then
+  game.StarterGui:SetCore("SendNotification", {
+   Title = "Error",
+   Text = "Could not find the target's torso.",
+   Duration = 2
+  })
+  return
+ end
+
+ -- 100% точное попадание прямо в точку (центр торса)
+ local targetPosition = torso.Position
+
+ local originPosition = player.Character:FindFirstChild("RightHand")
+  and player.Character.RightHand.Position
+  or player.Character.HumanoidRootPart.Position
+
+ local args = {
+  CFrame.new(originPosition),
+  CFrame.new(targetPosition)
+ }
+
+ pcall(function()
+  player.Character:WaitForChild("Gun"):WaitForChild("Shoot"):FireServer(unpack(args))
+ end)
+
+ game.StarterGui:SetCore("SendNotification", {
+  Title = "Shot Fired",
+  Text = "100% accurate shot at red dot!",
+  Duration = 1.5
+ })
+end)
